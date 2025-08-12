@@ -1,0 +1,163 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.daily_steps (
+  user_id uuid,
+  date date NOT NULL,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  steps integer NOT NULL DEFAULT 0,
+  points_earned integer DEFAULT 0,
+  points_lost integer DEFAULT 0,
+  weekly_average integer,
+  synced_from text DEFAULT 'healthkit'::text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT daily_steps_pkey PRIMARY KEY (id),
+  CONSTRAINT daily_steps_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.events (
+  name text NOT NULL,
+  description text,
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  target_steps integer NOT NULL,
+  bonus_points integer NOT NULL,
+  icon text,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  is_active boolean DEFAULT true,
+  color text DEFAULT '#FFD60A'::text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT events_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.friendships (
+  user_id uuid,
+  friend_id uuid,
+  requested_by uuid,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'accepted'::text, 'blocked'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT friendships_pkey PRIMARY KEY (id),
+  CONSTRAINT friendships_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.user_profiles(id),
+  CONSTRAINT friendships_friend_id_fkey FOREIGN KEY (friend_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT friendships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.group_leaderboard_cache (
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  period_start date NOT NULL,
+  period_end date NOT NULL,
+  rank integer,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  total_steps integer NOT NULL DEFAULT 0,
+  last_updated timestamp with time zone DEFAULT now(),
+  CONSTRAINT group_leaderboard_cache_pkey PRIMARY KEY (id),
+  CONSTRAINT group_leaderboard_cache_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.groups(id),
+  CONSTRAINT group_leaderboard_cache_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.group_memberships (
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  role text DEFAULT 'member'::text CHECK (role = ANY (ARRAY['admin'::text, 'member'::text])),
+  joined_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT group_memberships_pkey PRIMARY KEY (id),
+  CONSTRAINT group_memberships_group_id_fkey FOREIGN KEY (group_id) REFERENCES public.groups(id),
+  CONSTRAINT group_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.groups (
+  name text NOT NULL,
+  description text,
+  created_by uuid NOT NULL,
+  leaderboard_reset_period text NOT NULL CHECK (leaderboard_reset_period = ANY (ARRAY['daily'::text, 'weekly'::text, 'biweekly'::text, 'monthly'::text])),
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  invite_code text NOT NULL DEFAULT encode(gen_random_bytes(6), 'base64'::text) UNIQUE,
+  is_active boolean DEFAULT true,
+  member_count integer DEFAULT 1,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT groups_pkey PRIMARY KEY (id),
+  CONSTRAINT groups_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.leaderboard_cache (
+  user_id uuid NOT NULL,
+  date date NOT NULL,
+  global_daily_rank integer,
+  global_weekly_rank integer,
+  friends_daily_rank integer,
+  friends_weekly_rank integer,
+  last_rank_calculation timestamp with time zone,
+  tier_id integer,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  daily_steps integer NOT NULL DEFAULT 0,
+  weekly_steps integer NOT NULL DEFAULT 0,
+  last_steps_update timestamp with time zone DEFAULT now(),
+  needs_rank_update boolean DEFAULT true,
+  total_points integer DEFAULT 0,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT leaderboard_cache_pkey PRIMARY KEY (id),
+  CONSTRAINT leaderboard_cache_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT leaderboard_cache_tier_id_fkey FOREIGN KEY (tier_id) REFERENCES public.tiers(id)
+);
+CREATE TABLE public.tiers (
+  id integer NOT NULL DEFAULT nextval('tiers_id_seq'::regclass),
+  name text NOT NULL,
+  points_required integer NOT NULL,
+  icon text,
+  color_primary text,
+  color_secondary text,
+  sort_order integer NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT tiers_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.user_device_tokens (
+  user_id uuid,
+  device_token text NOT NULL,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  platform text DEFAULT 'ios'::text CHECK (platform = ANY (ARRAY['ios'::text, 'android'::text])),
+  is_active boolean DEFAULT true,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_device_tokens_pkey PRIMARY KEY (id),
+  CONSTRAINT user_device_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.user_event_participation (
+  user_id uuid,
+  event_id uuid,
+  date date NOT NULL,
+  steps_achieved integer NOT NULL,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  bonus_points_earned integer DEFAULT 0,
+  completed boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_event_participation_pkey PRIMARY KEY (id),
+  CONSTRAINT user_event_participation_event_id_fkey FOREIGN KEY (event_id) REFERENCES public.events(id),
+  CONSTRAINT user_event_participation_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id)
+);
+CREATE TABLE public.user_profiles (
+  updated_at timestamp with time zone DEFAULT now(),
+  id uuid NOT NULL,
+  username text NOT NULL UNIQUE,
+  display_name text,
+  avatar_url text,
+  created_at timestamp with time zone DEFAULT now(),
+  timezone text DEFAULT 'UTC'::text,
+  CONSTRAINT user_profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.user_stats (
+  user_id uuid UNIQUE,
+  current_tier_id integer,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  total_points integer DEFAULT 0,
+  weekly_average_steps integer DEFAULT 0,
+  lifetime_steps bigint DEFAULT 0,
+  current_streak_days integer DEFAULT 0,
+  longest_streak_days integer DEFAULT 0,
+  last_calculated_at timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_stats_pkey PRIMARY KEY (id),
+  CONSTRAINT user_stats_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.user_profiles(id),
+  CONSTRAINT user_stats_current_tier_id_fkey FOREIGN KEY (current_tier_id) REFERENCES public.tiers(id)
+);
